@@ -9,9 +9,6 @@ from openai import OpenAI
 # Load environment variables (for OpenAI API key)
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-print("LOADED KEY:", os.getenv("OPENAI_API_KEY"))
-
-
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -64,35 +61,44 @@ async def chat_with_data(question: str = Form(...)):
     if global_df is None:
         return {"answer": "Please upload a CSV file first."}
     
-    # Prepare dataset summary to give the LLM context
-    columns = ", ".join(global_df.columns.tolist())
-    preview = global_df.head(5).to_markdown(index=False)
+    # Get column names and types to help the AI write accurate Python code
+    columns_info = global_df.dtypes.to_string()
     
-    # System prompt guiding the assistant to act as a data analyst
+    # System prompt guiding the AI to generate a python command for the FULL dataset
     system_prompt = f"""
-    You are an expert Data Analyst. 
-    The user has uploaded a dataset with columns: {columns}.
-    Preview:
-    {preview}
-    
-    Answer the user's question based on this data structure.
+    You are an expert Data Analyst assistant. The user has a pandas DataFrame named 'df'.
+    The dataset has the following columns and data types:
+    {columns_info}
+
+    Your task is to write a short, single-line Python pandas expression that answers the user's question.
+    - Only return the code itself (e.g., df['Sales'].sum() or df['Status'].value_counts()).
+    - Do not write any explanations or extra text.
+    - If the user asks a general question, write code that provides the most relevant summary.
     """
     
     try:
-        # Send question + dataset context to OpenAI model
+        # Ask OpenAI to generate the code instead of the final answer
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",   # Model choice is flexible for this prototype
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question}
+                {"role": "user", "content": f"Write pandas code to answer: {question}"}
             ],
-            max_tokens=200,
-            temperature=0.7
+            temperature=0  # Low temperature for precise code generation
         )
 
-        # Return AI’s answer back to the UI
-        return {"answer": response.choices[0].message.content}
+    
+        # This removes any backticks or "python" labels the AI might include
+        generated_code = response.choices[0].message.content.strip().replace('`', '').replace('python', '')
+
+
+        # Execute the generated code on the FULL global_df
+        # Using eval() allows us to run the string as actual Python code
+        analysis_result = eval(generated_code, {"df": global_df, "pd": pd})
+
+        # Return the actual calculated result back to the UI
+        return {"answer": f"Analysis Result: {analysis_result}"}
         
     except Exception as e:
         # Simple error handling for debugging
-        return {"answer": f"Error: {str(e)}"}
+        return {"answer": f"I couldn't process that query. Please make sure you are asking about existing columns."}
