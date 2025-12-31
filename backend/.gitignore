@@ -1,0 +1,9 @@
+.env
+
+# Python specific
+venv/
+__pycache__/
+*.pyc
+
+# OS specific
+.DS_Store
