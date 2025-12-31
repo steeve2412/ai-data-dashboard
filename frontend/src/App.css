@@ -1,0 +1,22 @@
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+.upload-section {
+  background-color: #f8f9fa;
+  border: 2px dashed #ccc;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: inline-block;
+}
+
+.file-tag {
+  margin-top: 10px;
+  font-weight: bold;
+  color: #555;
+}
