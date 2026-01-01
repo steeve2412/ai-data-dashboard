@@ -1,7 +1,7 @@
 import os
 import io
 import pandas as pd
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -53,6 +53,38 @@ async def upload_file(file: UploadFile = File(...)):
         "data": df.fillna("").to_dict(orient="records")
     }
 
+@app.post("/update_cell")
+async def update_cell(update: dict = Body(...)):
+    # Handle cell updates from the frontend grid
+    global global_df
+    
+    if global_df is None:
+        return {"error": "No data loaded"}
+    
+    # Extract the update details sent by AG Grid
+    row_idx = int(update['rowIndex'])
+    col_name = update['colId']
+    new_value = update['newValue']
+    
+    # Update the specific cell in the global dataframe
+    global_df.at[row_idx, col_name] = new_value
+    
+    return {"message": "Update successful", "value": new_value}
+
+@app.post("/add_row")
+async def add_row(new_row: dict = Body(...)):
+    # Handle adding a new row from the frontend
+    global global_df
+    
+    if global_df is None:
+        return {"error": "No data loaded"}
+    
+    # Create a new DataFrame for the single row and append it
+    new_row_df = pd.DataFrame([new_row])
+    global_df = pd.concat([global_df, new_row_df], ignore_index=True)
+    
+    return {"message": "Row added successfully", "total_rows": len(global_df)}
+
 @app.post("/chat")
 async def chat_with_data(question: str = Form(...)):
     # Handle questions only if a dataset has been uploaded
@@ -87,18 +119,14 @@ async def chat_with_data(question: str = Form(...)):
             temperature=0  # Low temperature for precise code generation
         )
 
-    
         # This removes any backticks or "python" labels the AI might include
         generated_code = response.choices[0].message.content.strip().replace('`', '').replace('python', '')
 
-
         # Execute the generated code on the FULL global_df
-        # Using eval() allows us to run the string as actual Python code
         analysis_result = eval(generated_code, {"df": global_df, "pd": pd})
 
         # Return the actual calculated result back to the UI
         return {"answer": f"Analysis Result: {analysis_result}"}
         
     except Exception as e:
-        # Simple error handling for debugging
         return {"answer": f"I couldn't process that query. Please make sure you are asking about existing columns."}
